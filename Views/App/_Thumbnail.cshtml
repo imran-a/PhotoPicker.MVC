@@ -1,0 +1,12 @@
+﻿@model PhotoPicker.MVC.Domain.Photo
+@{
+    string FilePath = @Href(ViewData["ThumbImagePath"].ToString() + Model.ImageName);
+}
+<div class="thumbnail">
+    <li class="span4">
+        <div>
+            <img src="@FilePath" style="width:300px;height:200px">
+            <button class="btn btn-info btn-mini like-button" style="display:none" data-liked="false" data-imagename="@Model.ImageName">Like</button>
+        </div>
+    </li>
+</div>

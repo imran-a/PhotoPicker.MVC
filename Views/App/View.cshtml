@@ -1,0 +1,303 @@
+﻿@model PhotoPicker.MVC.Models.AppViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = @Model.Title;
+}
+
+<style>
+.progress { background:transparent url('/content/bigloader.gif') no-repeat center center; }
+</style>
+
+<h2>@Model.Title</h2>
+
+
+<div class="container">
+    <div id="spinner" style="position:fixed;display:block;top:0;right:0;height:66px;width:66px"></div>
+    <div class="header">
+        <h1></h1>
+        <div class="row">
+            <div class="span9">
+                <strong>WHO YOU:</strong>
+                <span id="user-list">
+                    @foreach (var user in Model.Users)
+                    {
+                        <button type="button" class="btn btn-primary user-button" data-user-id="@user.Id">@user.Name</button>
+                    }
+                </span>
+            </div>
+        </div>
+        <div class="row">
+            <div class="span9" id="view-mode-list" style="display:none">
+                <strong>VIEW MODE:</strong>
+                <button type="button" class="btn btn-success" id="view-mode-all">All Photos</button>
+                <button type="button" class="btn btn-success" id="view-mode-liked">Liked by You</button>
+                <button type="button" class="btn btn-success" id="view-mode-all-liked">All Liked</button>
+            </div>
+        </div>
+    </div>
+    <div class="row gallery">
+        <ul class="thumbnails" id="photo-list">
+            
+        </ul>
+    </div>
+</div>
+
+<script id="tpl-thumbnail" type="text/template">
+    <li class="span4">
+        <div class="thumbnail">
+            <img src="<%=FilePath%>" style="width:300px;height:200px">
+            <button class="btn btn-info btn-mini like-button" data-selected-id="<%=SelectedPhotoId%>">Like</button>
+        </div>
+    </li>
+</script>
+
+
+<script>
+    $(function () {
+
+        var _mShowAll = 'SHOWALL';
+        var _mLiked = 'LIKED';
+        var _mAllLiked = 'ALLLIKED';
+
+        var app = app || {};
+        app.Id = @Model.Id;
+        app.ThumbImagePath = '@Model.ThumbImagePath';
+
+        app.ViewMode = new function () { 
+            
+            this.el = '#photo-list';
+            var currentMode = 'NOTSET';
+            var currentPage = 1;
+            var ajaxImageLoading = false;
+
+            // get
+            this.getCurrentMode = function () {
+                return currentMode;
+            }
+
+            // set and initiate
+            this.setCurrentMode = function (m) {
+                
+                // resets
+                currentMode = m;
+                currentPage = 1;
+                var o = this;
+                
+                var queryUrl = '';
+                $(this.el).empty();
+                var template = _.template($('#tpl-thumbnail').html());
+
+                switch(currentMode) {
+                    case _mShowAll:
+                        queryUrl = '@Url.Action("GetAllPhotos", "App")';
+                        break;
+                    case _mLiked:
+                        queryUrl = '@Url.Action("GetUserSelectedPhotos", "App")';
+                        break;
+                    case _mAllLiked:
+                        queryUrl = '@Url.Action("GetAllLikedPhotos", "App")';
+                        break;
+                }
+
+                $.get(queryUrl, { appId : app.Id, userId : app.CurrentUser.Id, page : currentPage }, function (res) {
+                    _.each(res.Photos, function (photo) {
+                        
+                        // append
+                        var thumb = $(template({ FilePath : app.ThumbImagePath +  photo.ImageName, SelectedPhotoId : photo.SelectedPhotoId }));
+                        var b = $(thumb).find('button');
+                        $(o.el).append(thumb);
+
+                        // LIKE button states
+                        if(photo.SelectedPhotoId >0) {
+                            TogglePhotoLike(b, true);
+                        }
+                        else {
+                            TogglePhotoLike(b, false);
+                        }
+
+                        if(currentMode == _mAllLiked) {
+                            thumb.data('others', photo.Others);
+                            if(photo.Others && photo.SelectedPhotoId == 0)
+                                $(b).hide();
+                        }
+                        else {
+                            thumb.removeData('others');
+                        }
+                    });
+                });
+
+                this.initPaging();
+
+            }
+
+            // initiate paging
+            this.initPaging = function () {
+
+                var o = this;
+
+                $(window).scroll(function(){
+                    if  ($(window).scrollTop() == $(document).height() - $(window).height()){
+                        o.page();
+                    }
+                });
+            }
+            
+
+            this.page = function () {
+
+                if(this.ajaxImageLoading) { 
+                    return;
+                }
+
+                var o = this;
+                this.ajaxImageLoading = true;
+                var template = _.template($('#tpl-thumbnail').html());
+
+                $.get('@Url.Action("GetAllPhotos", "App")', { appId : app.Id, userId : app.CurrentUser.Id, page : currentPage + 1 }, function (res) {
+                    _.each(res.Photos, function (photo) {
+                        
+                        // append
+                        var thumb = $(template({ FilePath : app.ThumbImagePath +  photo.ImageName, SelectedPhotoId : photo.SelectedPhotoId }));
+                        var b = $(thumb).find('button');
+                        $(o.el).append(thumb);
+
+                        // LIKE button states
+                        if(photo.SelectedPhotoId >0) {
+                            TogglePhotoLike(b, true);
+                        }
+                        else {
+                            TogglePhotoLike(b, false);
+                        }
+
+                        if(currentMode == _mAllLiked) {
+                            thumb.data('others', photo.Others);
+                            if(photo.Others && photo.SelectedPhotoId == 0)
+                                $(b).hide();
+                        }
+                        else {
+                            thumb.removeData('others');
+                        }
+                    
+                    });
+                }).complete(function() { 
+                    o.ajaxImageLoading = false;
+                });
+            }
+            
+        };
+
+        // access to current selected user
+        app.CurrentUser = function () { };
+
+        // add listeners to the user buttons
+        $('.user-button').live('click', function () {
+            // set the default user and run default mode
+            app.CurrentUser = new User($(this).data('user-id'), function () {
+                $('#view-mode-list').slideDown();
+            });
+        });
+
+        // add listeners to the view-mode changes
+        $('#view-mode-all').click(function () {
+            app.ViewMode.setCurrentMode(_mShowAll);
+        });
+
+        $('#view-mode-liked').click(function () {
+            app.ViewMode.setCurrentMode(_mLiked);
+        });
+
+        $('#view-mode-all-liked').click(function () {
+            app.ViewMode.setCurrentMode(_mAllLiked);
+        });
+
+        // add listeners to the like buttons 
+        $('.like-button').live('click', function () {
+            
+            var b = $(this);
+            var selectedId = $(b).data('selected-id');
+
+            if( selectedId == 0 ) {
+                var imageName = $(b).prev('img').attr('src').replace( /^.*?([^/]+\..+?)$/, '$1' );
+                app.CurrentUser.LikePhoto(imageName, function (id) {
+                    if(id > 0) {
+                        $(b).data('selected-id', id);
+                        TogglePhotoLike($(b), true);
+                    }
+                    else { 
+                        console.log('err1');
+                        alert('error'); 
+                    }
+                });
+            }
+            else {
+                app.CurrentUser.UnlikePhoto(selectedId, function () {
+                    $(b).data('selected-id', 0);
+                    TogglePhotoLike($(b), false);
+                });
+            }
+        });
+
+        // ajax loading 
+        $('#spinner')
+            .ajaxStart(function() {$(this).addClass('progress'); console.log('shit happening'); })
+            .ajaxStop( function(){$(this).removeClass('progress');
+
+  });
+
+        function TogglePhotoLike(objButton, boolLiked) {
+
+            if(boolLiked) {
+                $(objButton).text('Unlike');
+            }
+            else {
+                $(objButton).text('Like');
+            }
+        }
+
+        function User(userId, callback) {
+            
+            this.Id = userId;
+            this.InitReady = callback;
+
+            // represents an array of SelectedPhotosIds
+            var photos = undefined;
+            this.Populate = function() {
+
+                var o = this;
+
+                $.get('@Url.Action("GetSelectedPhotosForUser", "App")', { userId : this.Id }, function (res) { 
+                    selectedPhotos = res;
+                    if(o.InitReady) o.InitReady.apply();
+                });
+            };
+            this.Populate();
+
+            this.SelectedPhotos = function () {
+                return selectedPhotos;
+            };
+
+            this.LikePhoto = function(imageName, callback) {
+                $.post('@Url.Action("UserSelectPhoto", "App")', { userId : this.Id, imageName : imageName }, function(res) {
+                    
+                    // update array
+                    if(res > 0) {
+                        selectedPhotos.push(res);
+                    }
+                    
+                    // callback
+                    if(callback) callback(res);
+                });
+            }
+
+            this.UnlikePhoto = function(selectedId, callback) {
+                $.post('@Url.Action("UserDeselectPhoto", "App")', { userId : this.Id, selectedPhotoId : selectedId }, function() {
+                    $.each(selectedPhotos, function(i){
+                        if(selectedPhotos[i] == selectedId) selectedPhotos.splice(i,1);
+                    });
+                    if(callback) callback();
+                });
+            }
+        }
+
+    });
+</script>
