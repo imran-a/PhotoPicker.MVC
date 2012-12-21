@@ -5,16 +5,17 @@
 }
 
 <style>
+.container { position:relative;}
 .progress { background:transparent url('/content/bigloader.gif') no-repeat center center; }
+.header { position:fixed; }
+.gallery { margin-top:150px; }
 </style>
-
-<h2>@Model.Title</h2>
 
 
 <div class="container">
     <div id="spinner" style="position:fixed;display:block;top:0;right:0;height:66px;width:66px"></div>
     <div class="header">
-        <h1></h1>
+        <h1>@Model.Title</h1>
         <div class="row">
             <div class="span9">
                 <strong>WHO YOU:</strong>
@@ -22,16 +23,19 @@
                     @foreach (var user in Model.Users)
                     {
                         <button type="button" class="btn btn-primary user-button" data-user-id="@user.Id">@user.Name</button>
-                    }
+                    }   
                 </span>
             </div>
         </div>
-        <div class="row">
-            <div class="span9" id="view-mode-list" style="display:none">
+        <div class="row" id="view-mode-list" style="display:none">
+            <div class="span7">
                 <strong>VIEW MODE:</strong>
                 <button type="button" class="btn btn-success" id="view-mode-all">All Photos</button>
                 <button type="button" class="btn btn-success" id="view-mode-liked">Liked by You</button>
                 <button type="button" class="btn btn-success" id="view-mode-all-liked">All Liked</button>
+            </div>
+            <div class="span3">
+                LIKES: <span id="likes-current"></span> / <span id="likes-total"></span>
             </div>
         </div>
     </div>
@@ -45,8 +49,11 @@
 <script id="tpl-thumbnail" type="text/template">
     <li class="span4">
         <div class="thumbnail">
-            <img src="<%=FilePath%>" style="width:300px;height:200px">
-            <button class="btn btn-info btn-mini like-button" data-selected-id="<%=SelectedPhotoId%>">Like</button>
+            <a rel="gallery">
+                <img src="<%=FilePath%>" style="width:300px;height:200px">
+            </a>
+            <button class="btn btn-info btn-mini like-button">Like</button>
+            <span></span>
         </div>
     </li>
 </script>
@@ -62,6 +69,8 @@
         var app = app || {};
         app.Id = @Model.Id;
         app.ThumbImagePath = '@Model.ThumbImagePath';
+        app.ImagePath = '@Model.ImagePath';
+        app.FinalCount = @Model.FinalCount;
 
         app.ViewMode = new function () { 
             
@@ -69,6 +78,9 @@
             var currentMode = 'NOTSET';
             var currentPage = 1;
             var ajaxImageLoading = false;
+            var totalPages;
+            var totalImages;
+            var totalSelected;
 
             // get
             this.getCurrentMode = function () {
@@ -81,6 +93,15 @@
                 // resets
                 currentMode = m;
                 currentPage = 1;
+                
+                // initial load
+                this.load();
+                this.initPaging();
+
+            }
+
+            this.load = function () {
+                
                 var o = this;
                 
                 var queryUrl = '';
@@ -100,35 +121,64 @@
                 }
 
                 $.get(queryUrl, { appId : app.Id, userId : app.CurrentUser.Id, page : currentPage }, function (res) {
+                    
+                    totalImages = res.TotalPhotos;
+                    totalPages = res.Pages;
+                    totalSelected = res.TotalSelected;
+                    o.showCounts();
+
                     _.each(res.Photos, function (photo) {
                         
                         // append
-                        var thumb = $(template({ FilePath : app.ThumbImagePath +  photo.ImageName, SelectedPhotoId : photo.SelectedPhotoId }));
+                        var thumb = $(template({ FilePath : app.ThumbImagePath +  photo.ImageName }));
                         var b = $(thumb).find('button');
                         $(o.el).append(thumb);
 
-                        // LIKE button states
-                        if(photo.SelectedPhotoId >0) {
-                            TogglePhotoLike(b, true);
-                        }
-                        else {
-                            TogglePhotoLike(b, false);
-                        }
-
+                        // assign 'other' data attribute
                         if(currentMode == _mAllLiked) {
-                            thumb.data('others', photo.Others);
-                            if(photo.Others && photo.SelectedPhotoId == 0)
-                                $(b).hide();
+
+                            if(photo.Others != null)
+                                $(b).data('others', photo.Others);
+
+                            //if(photo.Others != null && photo.SelectedPhotoId == 0)
+                                //$(b).hide();
                         }
                         else {
                             thumb.removeData('others');
                         }
+
+                        // LIKE button states
+                        if(photo.SelectedPhotoId >0) {
+                            $(b).data('selected-id', photo.selectedId);
+                            TogglePhotoLike(b, true);
+                        }
+                        else {
+                            $(b).removeData('selected-id');
+                            TogglePhotoLike(b, false);
+                        }
+
+                        // link path
+                        $(thumb).find('a').attr('href', app.ImagePath + photo.ImageName);
+
                     });
+                }).complete(function() { 
+                    o.ajaxImageLoading = false;
                 });
 
-                this.initPaging();
+                // fancybox stuff
+                $(".thumbnail a").fancybox({
+                    prevEffect		: 'none',
+                    nextEffect		: 'none',
+                    closeBtn		: false,
+                    helpers		: {
+                        title	: { type : 'inside' },
+                        buttons	: {}
+                    }
+                });
 
-            }
+
+            },
+
 
             // initiate paging
             this.initPaging = function () {
@@ -148,40 +198,28 @@
                 if(this.ajaxImageLoading) { 
                     return;
                 }
+                console.log(totalPages, totalImages);
+                if(currentPage > totalPages) {
+                    currentPage += 1;
+                    this.load();
+                }
+            },
 
-                var o = this;
-                this.ajaxImageLoading = true;
-                var template = _.template($('#tpl-thumbnail').html());
+            this.showCounts = function () {
+            
+                $('#likes-total').text(app.FinalCount);    
+                $('#likes-current').text(totalSelected);
+            },
 
-                $.get('@Url.Action("GetAllPhotos", "App")', { appId : app.Id, userId : app.CurrentUser.Id, page : currentPage + 1 }, function (res) {
-                    _.each(res.Photos, function (photo) {
-                        
-                        // append
-                        var thumb = $(template({ FilePath : app.ThumbImagePath +  photo.ImageName, SelectedPhotoId : photo.SelectedPhotoId }));
-                        var b = $(thumb).find('button');
-                        $(o.el).append(thumb);
+            this.updateSelectedCount = function(liked) {
+                if(liked) {
+                    totalSelected += 1;
+                }
+                else {
+                    totalSelected -= 1;
+                }
 
-                        // LIKE button states
-                        if(photo.SelectedPhotoId >0) {
-                            TogglePhotoLike(b, true);
-                        }
-                        else {
-                            TogglePhotoLike(b, false);
-                        }
-
-                        if(currentMode == _mAllLiked) {
-                            thumb.data('others', photo.Others);
-                            if(photo.Others && photo.SelectedPhotoId == 0)
-                                $(b).hide();
-                        }
-                        else {
-                            thumb.removeData('others');
-                        }
-                    
-                    });
-                }).complete(function() { 
-                    o.ajaxImageLoading = false;
-                });
+                this.showCounts();
             }
             
         };
@@ -214,14 +252,16 @@
         $('.like-button').live('click', function () {
             
             var b = $(this);
-            var selectedId = $(b).data('selected-id');
-
-            if( selectedId == 0 ) {
-                var imageName = $(b).prev('img').attr('src').replace( /^.*?([^/]+\..+?)$/, '$1' );
+            alert('click');
+            if( !$(b).data('selected-id') ) {
+                
+                // TODO - use a better selector here =>
+                var imageName = $(b).prev().find('img').attr('src').replace( /^.*?([^/]+\..+?)$/, '$1' );
                 app.CurrentUser.LikePhoto(imageName, function (id) {
                     if(id > 0) {
                         $(b).data('selected-id', id);
                         TogglePhotoLike($(b), true);
+                        app.ViewMode.updateSelectedCount(true);
                     }
                     else { 
                         console.log('err1');
@@ -230,30 +270,44 @@
                 });
             }
             else {
-                app.CurrentUser.UnlikePhoto(selectedId, function () {
-                    $(b).data('selected-id', 0);
+                app.CurrentUser.UnlikePhoto($(b).data('selected-id'), function () {
+                    $(b).removeData('selected-id');
                     TogglePhotoLike($(b), false);
+                    app.ViewMode.updateSelectedCount(false);
                 });
             }
         });
 
         // ajax loading 
         $('#spinner')
-            .ajaxStart(function() {$(this).addClass('progress'); console.log('shit happening'); })
-            .ajaxStop( function(){$(this).removeClass('progress');
-
-  });
+            .ajaxStart(function() {$(this).addClass('progress'); })
+            .ajaxStop(function(){$(this).removeClass('progress');  });
 
         function TogglePhotoLike(objButton, boolLiked) {
 
+            var span = $(objButton).next();
+
             if(boolLiked) {
                 $(objButton).text('Unlike');
+                
+                var text = '';
+
+                if($(objButton).data('others')) {
+                    text = 'You & ' + $(objButton).data('others') + ' like this';
+                }
+                else {
+                    text = 'You like this';
+                }
+                
+                $(span).text(text);
             }
             else {
                 $(objButton).text('Like');
+                $(span).text('');
             }
         }
 
+        
         function User(userId, callback) {
             
             this.Id = userId;

@@ -19,6 +19,9 @@ namespace PhotoPicker.MVC.Domain
         [Required]
         public int PageSize { get; set; }
 
+        [Required]
+        public int FinalCount { get; set; }
+
         public virtual ICollection<User> Users { get; set; }
     }
 

@@ -16,6 +16,7 @@ namespace PhotoPicker.MVC.Models
         public int PageSize { get; set; }
         public int Pages { get; set; }
         public int TotalPhotos { get; set; }
+        public int TotalSelected { get; set; }
         public List<Photo> Photos { get; set; }
 
         public class Photo
@@ -37,13 +38,14 @@ namespace PhotoPicker.MVC.Models
         public int PageSize { get; set; }
         public int Pages { get; set; }
         public int TotalPhotos { get; set; }
+        public int TotalSelected { get; set; }
         public List<Photo> Photos { get; set; }
 
         public class Photo
         {
             public string ImageName { get; set; }
             public int SelectedPhotoId { get; set; }
-            public bool Others { get; set; }
+            public string Others { get; set; }
         }
 
     }

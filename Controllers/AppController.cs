@@ -95,6 +95,7 @@ namespace PhotoPicker.MVC.Controllers
                 view.PageSize = app.PageSize;
                 view.TotalPhotos = photoService.GetPhotos(app.ImagePathDirectory + "/thumb/", app.PageSize, page).Count();
                 view.Pages = (int)Math.Ceiling(view.TotalPhotos / (double)app.PageSize);
+                view.TotalSelected = userSelectedPhotos.Count();
             }
 
             return Json(view, JsonRequestBehavior.AllowGet);
@@ -113,8 +114,9 @@ namespace PhotoPicker.MVC.Controllers
                 
                 view.CurrentPage = page;
                 view.PageSize = app.PageSize;
-                view.TotalPhotos = photoService.GetPhotos(app.ImagePathDirectory + "/thumb/", app.PageSize, page).Count();
+                view.TotalPhotos = view.Photos.Count();
                 view.Pages = (int)Math.Ceiling(view.TotalPhotos / (double)app.PageSize);
+                view.TotalSelected = view.Photos.Count();
             }
 
             return Json(view, JsonRequestBehavior.AllowGet);
@@ -135,16 +137,25 @@ namespace PhotoPicker.MVC.Controllers
                 {
                     photo = new PhotosAllSelectedViewModel.Photo() { ImageName = imageName };
 
-                    var totalSelected = all.Where(s => s.ImageName == imageName).Count();
-                    var selectedByUser = all.Where(s => s.ImageName == imageName && s.UserId == userId).FirstOrDefault();
-                    if (selectedByUser != null)
+                    var selectedBy = all.Where(s => s.ImageName == imageName).ToList();
+                    var totalSelected = selectedBy.Count();
+
+                    var isSelectedByUser = selectedBy.Where(s => s.UserId == userId).FirstOrDefault();
+
+                    if (isSelectedByUser != null)
                     {
-                        photo.SelectedPhotoId = selectedByUser.Id;
-                        if (totalSelected > 1) photo.Others = true;
+                        photo.SelectedPhotoId = isSelectedByUser.Id;
+                        if (totalSelected > 1)
+                        {
+                            photo.Others = string.Join(",", selectedBy.Where(s => s.UserId != userId).Select(s => s.User.Name).ToArray());
+                        }
                     }
                     else
                     {
-                        if (totalSelected > 0) photo.Others = true;
+                        if (totalSelected > 0)
+                        {
+                            photo.Others = string.Join(",", selectedBy.Select(s => s.User.Name).ToArray());
+                        }
                     }
 
                     view.Photos.Add(photo);
@@ -152,8 +163,9 @@ namespace PhotoPicker.MVC.Controllers
 
                 view.CurrentPage = page;
                 view.PageSize = app.PageSize;
-                view.TotalPhotos = photoService.GetPhotos(app.ImagePathDirectory + "/thumb/", app.PageSize, page).Count();
+                view.TotalPhotos = distinctImageNames.Count();
                 view.Pages = (int)Math.Ceiling(view.TotalPhotos / (double)app.PageSize);
+                view.TotalSelected = distinctImageNames.Count();
             }
 
             return Json(view, JsonRequestBehavior.AllowGet);

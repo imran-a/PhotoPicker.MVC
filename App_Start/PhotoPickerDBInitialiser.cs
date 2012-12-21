@@ -20,7 +20,8 @@ namespace PhotoPicker.MVC
                 {
                     Title = "Wedding Pictures",
                     ImagePathDirectory = "~/content/images/1/",
-                    PageSize = 50,
+                    PageSize = 12,
+                    FinalCount = 100,
                     Users = new List<User> 
                     {
                         new User 
